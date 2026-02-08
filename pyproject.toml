@@ -1,0 +1,49 @@
+# Python 项目配置
+# TODO: 任务 1 - 定义项目元数据和依赖
+
+[project]
+name = "superbiz-agent"
+version = "1.0.0"
+description = "SuperBizAgent - Python 版本，使用 FastAPI + LangChain + Milvus"
+requires-python = ">=3.11"
+
+# TODO: 在这里添加依赖
+# Phase 1 核心依赖:
+# - fastapi>=0.104.0
+# - uvicorn[standard]>=0.24.0
+# - pydantic>=2.5.0
+# - pydantic-settings>=2.1.0
+# - httpx>=0.25.0
+# - pymilvus>=2.3.0
+# - loguru>=0.7.0
+# - python-dotenv>=1.0.0
+
+dependencies = []
+
+[project.optional-dependencies]
+# TODO: 添加开发依赖
+# - pytest>=7.4.0
+# - pytest-asyncio>=0.21.0
+# - pytest-cov>=4.1.0
+# - pytest-mock>=3.12.0
+# - hypothesis>=6.92.0
+# - ruff>=0.1.0
+# - black>=23.11.0
+
+dev = []
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]

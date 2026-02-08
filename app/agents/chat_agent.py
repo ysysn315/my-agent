@@ -1,0 +1,153 @@
+# 对话 Agent - 支持工具调用的智能对话
+# 使用 LangGraph 实现（避免 create_react_agent 的 StopIteration bug）
+
+from langchain_community.chat_models import ChatTongyi
+from typing import List, TypedDict, Annotated
+from loguru import logger
+from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import ToolNode
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+import operator
+
+
+class AgentState(TypedDict):
+    """Agent 状态定义"""
+    messages: Annotated[List, operator.add]
+
+
+class ChatAgent:
+    def __init__(self, api_key: str, model: str, tools: List):
+        """
+       初始化 ChatAgent
+
+       参数:
+           api_key: DashScope API Key
+           model: 模型名称，如 "qwen-max"
+           tools: 工具列表，如 [get_current_datetime, query_internal_docs]
+       """
+        # 创建 LLM（绑定工具）
+        self.llm = ChatTongyi(
+            dashscope_api_key=api_key,
+            model_name=model,
+            streaming=False  # LangGraph 暂时不支持流式
+        ).bind_tools(tools)
+        
+        self.tools = {tool.name: tool for tool in tools}
+        
+        # 创建 LangGraph
+        self.graph = self._create_graph()
+
+    def _create_graph(self):
+        """创建 LangGraph 工作流"""
+        # 定义节点函数
+        async def call_model(state: AgentState):
+            """调用 LLM"""
+            messages = state["messages"]
+            response = await self.llm.ainvoke(messages)
+            return {"messages": [response]}
+        
+        async def call_tools(state: AgentState):
+            """调用工具"""
+            last_message = state["messages"][-1]
+            tool_calls = last_message.tool_calls
+            
+            results = []
+            for tool_call in tool_calls:
+                tool_name = tool_call["name"]
+                tool_args = tool_call["args"]
+                
+                # 执行工具
+                tool = self.tools[tool_name]
+                result = await tool.ainvoke(tool_args)
+                
+                # 构造 ToolMessage
+                from langchain_core.messages import ToolMessage
+                results.append(ToolMessage(
+                    content=str(result),
+                    tool_call_id=tool_call["id"]
+                ))
+            
+            return {"messages": results}
+        
+        def should_continue(state: AgentState):
+            """判断是否继续"""
+            last_message = state["messages"][-1]
+            if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+                return "tools"
+            return "end"
+        
+        # 构建图
+        workflow = StateGraph(AgentState)
+        
+        # 添加节点
+        workflow.add_node("agent", call_model)
+        workflow.add_node("tools", call_tools)
+        
+        # 设置入口
+        workflow.set_entry_point("agent")
+        
+        # 添加条件边
+        workflow.add_conditional_edges(
+            "agent",
+            should_continue,
+            {
+                "tools": "tools",
+                "end": END
+            }
+        )
+        
+        # 工具执行后回到 agent
+        workflow.add_edge("tools", "agent")
+        
+        return workflow.compile()
+
+    async def chat(self, question: str, history: List[dict] = None) -> str:
+        """
+            执行对话
+            参数:
+                question: 用户问题
+                history: 对话历史（可选）
+
+            返回:
+                AI 回答
+        """
+        try:
+            logger.info(f"ChatAgent 收到问题: {question}")
+            
+            # 构建消息列表
+            messages = [
+                SystemMessage(content="你是一个有用的助手。你可以使用提供的工具来回答问题。")
+            ]
+            
+            # 添加历史消息
+            if history:
+                for msg in history:
+                    if msg["role"] == "user":
+                        messages.append(HumanMessage(content=msg["content"]))
+                    else:
+                        messages.append(AIMessage(content=msg["content"]))
+            
+            # 添加当前问题
+            messages.append(HumanMessage(content=question))
+            
+            # 调用 graph
+            result = await self.graph.ainvoke({"messages": messages})
+            
+            logger.info(f"Agent 执行结果: {result}")
+            
+            # 提取最后一条消息作为答案
+            if "messages" in result and len(result["messages"]) > 0:
+                last_message = result["messages"][-1]
+                answer = last_message.content if hasattr(last_message, 'content') else str(last_message)
+            else:
+                logger.error(f"无法从结果中提取答案: {result}")
+                answer = str(result)
+
+            logger.info(f"ChatAgent 回答: {answer[:50]}...")
+            return answer
+
+        except Exception as e:
+            logger.error(f"ChatAgent 执行失败: {str(e)}")
+            import traceback
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise
