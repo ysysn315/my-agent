@@ -3,7 +3,7 @@
 # TODO: 任务 3.2 - 添加健康检查端点 GET /health
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import routes_chat, routes_milvus, routes_session,routes_upload
+from app.api import routes_chat, routes_milvus, routes_session, routes_upload, routes_aiops
 app=FastAPI()
 
 
@@ -46,6 +46,7 @@ app.include_router(routes_chat.router,prefix="/api")
 app.include_router(routes_milvus.router,prefix="/milvus")
 app.include_router(routes_session.router,prefix="/api")
 app.include_router(routes_upload.router,prefix="/api")
+app.include_router(routes_aiops.router,prefix="/api")
 
 
 
