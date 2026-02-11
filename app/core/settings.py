@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     # DashScope 配置
     dashscope_api_key: str
-    chat_model: str = "qwen-flash"
+    chat_model: str = "qwen-max"
     embedding_model: str = "text-embedding-v4"
 
     # Milvus 配置

@@ -116,10 +116,19 @@ class AIOpsAgent:
 
 用户问题：{user_input}
 
-请制定详细的排查计划，包括：
-1. 需要调用哪些工具来收集信息
-2. 每个工具的参数
-3. 排查的理由
+请根据已知信息，**仅制定下一步**最关键的 1-2 个排查动作。
+- 如果已经查询过告警且没有明确线索，**必须**转向查询日志(query_log)或知识库(query_internal_docs)。
+**决策逻辑**：
+1. 【关键】如果之前的日志查询结果中已经包含了 **Error, Exception, Timeout** 等明确报错：
+   - 下一步必须是：调用 `query_internal_docs` 查询该报错的解决方案，或者直接说明“信息充足”。
+   - **严禁**再回头去查监控/告警。
+
+2. 如果日志没问题，但告警还在：
+   - 尝试扩大日志查询的时间范围，或查询关联服务的日志。
+
+3. **绝对禁止**：
+   - 严禁重复调用 `query_prometheus_alerts`（除非你认为告警状态发生了剧烈变化，但这很少见）。
+   - 严禁重复执行完全相同的 query_log 参数。
 
 可用工具：
 - query_prometheus_alerts: 查询 Prometheus 告警
@@ -138,7 +147,19 @@ class AIOpsAgent:
 已执行的步骤：
 {past_steps_str}
 
-根据已有信息，请制定下一步的排查计划。如果信息已经足够，请说明"信息充足，可以生成报告"。
+请根据已知信息，**仅制定下一步**最关键的 1-2 个排查动作。
+- 如果已经查询过告警且没有明确线索，**必须**转向查询日志(query_log)或知识库(query_internal_docs)。
+**决策逻辑**：
+1. 【关键】如果之前的日志查询结果中已经包含了 **Error, Exception, Timeout** 等明确报错：
+   - 下一步必须是：调用 `query_internal_docs` 查询该报错的解决方案，或者直接说明“信息充足”。
+   - **严禁**再回头去查监控/告警。
+
+2. 如果日志没问题，但告警还在：
+   - 尝试扩大日志查询的时间范围，或查询关联服务的日志。
+
+3. **绝对禁止**：
+   - 严禁重复调用 `query_prometheus_alerts`（除非你认为告警状态发生了剧烈变化，但这很少见）。
+   - 严禁重复执行完全相同的 query_log 参数。
 
 可用工具：
 - query_prometheus_alerts: 查询 Prometheus 告警
@@ -178,22 +199,30 @@ class AIOpsAgent:
         # 1. 获取计划
         plan = state["plan"]
         user_input = state["input"]
-
+        past_steps = state.get("past_steps", [])
+        context_str = "\n".join(past_steps[-3:]) if past_steps else "无（首次执行）"
         # 2. 构建 Prompt（让 LLM 根据计划调用工具）
-        prompt = f"""你是一个 AIOps 执行助手，负责调用工具收集信息。
+        prompt = f"""你是一个精准的执行助手。
 
 用户问题：{user_input}
+
+【重要参考上下文】
+(这是之前工具调用的结果，请从中提取 Pod名称、时间、错误信息等用于后续工具的参数)，尽量不重复执行之前的工具，除非参数不同:
+{context_str}
 
 排查计划：
 {plan}
 
 请根据计划调用相应的工具。你必须调用以下工具之一：
-- query_prometheus_alerts: 查询当前告警（无需参数）
-- query_log: 查询日志（参数：query, time_range）
-- query_internal_docs: 查询知识库（参数：query）
-- get_current_datetime: 获取当前时间（无需参数）
-
-重要：请根据计划调用合适的工具，不要只调用 get_current_datetime！"""
+- query_prometheus_alerts (): 查询当前告警（无需参数）
+- get_current_datetime (): 获取当前时间（无需参数）
+- query_prometheus_alerts (无参数)
+- query_log (query: str, time_range: str):查询日志
+- query_internal_docs (query: str)：查询知识库
+**重要**：请**严格按照上述计划**调用对应的工具。
+- 如果计划中提到查询日志，请务必调用 `query_log` 并填入合理的 query 参数和time_range参数。
+- 如果计划中提到查知识库，请务必调用 `query_internal_docs`并填入合理的query参数。
+- 不要自行决定跳过任何步骤。"""
 
         messages = [
             SystemMessage(content="你是一个 AIOps 执行助手，负责调用工具收集信息。"),
@@ -266,16 +295,22 @@ class AIOpsAgent:
 已收集的信息：
 {past_steps_str}
 
+**判定标准（重要）**：
+1. **只要**在日志中发现了明确的**错误堆栈、异常类名（Exception）或超时（Timeout）信息**，就视为**根因已找到**。此时**必须**生成最终报告。
+2. 不需要等待所有细节都完美，只要能解释告警原因（例如：CPU高是因为数据库连接池卡死）即可。
+
 请评估当前信息是否足够进行根因分析：
 
-1. 如果信息充足：
+1. 如果信息充足(符合上述“根因已找到”的标准)：
    - 请生成详细的故障分析报告
    - 报告格式：问题描述、根因分析、解决建议
    - 以"【最终报告】"开头
 
 2. 如果信息不足：
    - 简单说明"信息不足，需要继续排查"
-   - 不要给出具体建议（Planner 会重新规划）"""
+   - 不要给出具体建议（Planner 会重新规划）
+   **重要**：如果发现最近的步骤一直在重复查询相同内容（例如重复查告警），请在评估中明确指出‘需要尝试新的排查方向，如查询日志/知识库/时间’，以便引导 Planner。
+   """
 
         # 3. 调用 LLM
         messages = [
@@ -306,7 +341,7 @@ class AIOpsAgent:
         
         决策逻辑：
         1. 如果 response 不为空 → 已生成报告 → end
-        2. 如果 iteration >= 3 → 达到上限 → end（强制）
+        2. 如果 iteration >= 6 → 达到上限 → end（强制）
         3. 否则 → continue
         
         返回:
@@ -322,8 +357,8 @@ class AIOpsAgent:
             return "end"
 
         # 2. 如果达到最大循环次数，强制结束
-        if iteration >= 3:
-            logger.warning("⚠️ 决策: 达到最大循环次数(3次)，强制结束")
+        if iteration >= 6:
+            logger.warning("⚠️ 决策: 达到最大循环次数(6次)，强制结束")
             return "end"
 
         # 3. 否则继续
