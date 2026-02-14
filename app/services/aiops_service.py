@@ -9,6 +9,7 @@ from app.rag.embeddings import EmbeddingService
 from app.clients.milvus_client import MilvusClient
 from app.core.settings import Settings
 from loguru import logger
+from langchain.tools import tool
 
 
 class AIOpsService:
@@ -20,23 +21,29 @@ class AIOpsService:
         参数:
             settings: 应用配置
         """
-        self.settings = settings
 
         # 初始化 Milvus 和 VectorStore（用于文档检索工具）
         try:
+            self.settings = settings
+            self.milvus_client = MilvusClient(settings)
+            self.embedding_service = EmbeddingService(settings)
+            self.vector_store = VectorStore(self.milvus_client, self.embedding_service)
+            self._docs_ready = False
             logger.info("正在初始化文档检索工具...")
-            milvus_client = MilvusClient(settings)
-            embedding_service = EmbeddingService(settings)
-            vector_store = VectorStore(milvus_client, embedding_service)
-            docs_tool = create_docs_tool(vector_store)
+
+            @tool
+            async def docs_tool(query: str) -> str:
+                """查询内部文档知识库（初始化中/占位）"""
+                return "知识库尚未初始化。请先确保 Milvus 已启动，然后重试。"
+
             logger.info("✅ 文档检索工具初始化成功（使用真实 VectorStore）")
         except Exception as e:
             logger.warning(f"⚠️ 文档检索工具初始化失败: {e}")
             logger.warning("这可能是因为 Milvus 未启动或知识库为空")
             logger.warning("AIOps 功能仍可正常使用，但无法查询知识库")
+
             # 如果初始化失败，创建一个返回提示信息的工具
-            from langchain.tools import tool
-            
+
             @tool
             async def docs_tool(query: str) -> str:
                 """查询内部文档知识库（当前不可用）"""
@@ -69,6 +76,20 @@ class AIOpsService:
             分析报告
         """
         logger.info(f"AIOpsService 开始分析: {problem[:100]}...")
+        try:
+            await self.milvus_client.connect()
+            await self.milvus_client.ensure_collection()
+            if not self._docs_ready:
+                real_docs_tool = create_docs_tool(self.vector_store)
+                self.tools[2] = real_docs_tool
+                self.agent = AIOpsAgent(
+                    api_key=self.settings.dashscope_api_key,
+                    model=self.settings.chat_model,
+                    tools=self.tools
+                )
+                self._docs_ready = True
+        except Exception as e:
+            logger.warning(f"⚠️ 知识库初始化失败，将继续执行但禁用知识库检索: {e}")
         report = await self.agent.analyze(problem)
         logger.info("AIOpsService 分析完成")
         return report

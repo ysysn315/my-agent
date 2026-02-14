@@ -6,20 +6,103 @@
     <title>智能OnCall助手</title>
     <link rel="stylesheet" href="styles.css">
     <!-- Markdown 渲染库 -->
-    <script defer src="vendor/marked.min.js" onerror="(function(){var s=document.createElement('script');s.defer=true;s.src='https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js';s.onerror=function(){var s2=document.createElement('script');s2.defer=true;s2.src='https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js';document.head.appendChild(s2);};document.head.appendChild(s);}())"></script>
     <!-- 代码高亮库（可选） -->
-    <link rel="stylesheet" href="vendor/github.min.css" onerror="(function(){var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css';l.onerror=function(){var l2=document.createElement('link');l2.rel='stylesheet';l2.href='https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css';document.head.appendChild(l2);};document.head.appendChild(l);}())">
-    <script defer src="vendor/highlight.min.js" onerror="(function(){var s=document.createElement('script');s.defer=true;s.src='https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js';s.onerror=function(){var s2=document.createElement('script');s2.defer=true;s2.src='https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js';document.head.appendChild(s2);};document.head.appendChild(s);}())"></script>
 </head>
 <body>
+    <script>
+        (function () {
+            function loadScriptWithTimeout(primaryUrl, fallbackUrl, timeoutMs) {
+                return new Promise(function (resolve) {
+                    var done = false;
+                    function finish(ok) {
+                        if (done) return;
+                        done = true;
+                        resolve(!!ok);
+                    }
+
+                    var timer = setTimeout(function () {
+                        finish(false);
+                    }, timeoutMs || 5000);
+
+                    var s = document.createElement('script');
+                    s.src = primaryUrl;
+                    s.async = true;
+                    s.onload = function () {
+                        clearTimeout(timer);
+                        finish(true);
+                    };
+                    s.onerror = function () {
+                        clearTimeout(timer);
+                        finish(false);
+                    };
+                    document.head.appendChild(s);
+                }).then(function (ok) {
+                    if (ok) return true;
+                    if (!fallbackUrl) return false;
+                    return new Promise(function (resolve) {
+                        var s2 = document.createElement('script');
+                        s2.src = fallbackUrl;
+                        s2.async = true;
+                        s2.onload = function () { resolve(true); };
+                        s2.onerror = function () { resolve(false); };
+                        document.head.appendChild(s2);
+                    });
+                });
+            }
+
+            function loadCss(primaryUrl, fallbackUrl) {
+                return new Promise(function (resolve) {
+                    var link = document.createElement('link');
+                    link.rel = 'stylesheet';
+                    link.href = primaryUrl;
+                    link.onload = function () { resolve(true); };
+                    link.onerror = function () {
+                        if (!fallbackUrl) return resolve(false);
+                        var link2 = document.createElement('link');
+                        link2.rel = 'stylesheet';
+                        link2.href = fallbackUrl;
+                        link2.onload = function () { resolve(true); };
+                        link2.onerror = function () { resolve(false); };
+                        document.head.appendChild(link2);
+                    };
+                    document.head.appendChild(link);
+                });
+            }
+
+            try {
+                loadScriptWithTimeout(
+                    'https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js',
+                    5000
+                );
+
+                loadCss(
+                    'https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css',
+                    'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css'
+                );
+
+                loadScriptWithTimeout(
+                    'https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js',
+                    5000
+                );
+            } catch (e) {
+            }
+        }());
+    </script>
+
     <script>
         (function () {
             try {
                 var existing = localStorage.getItem('API_BASE_URL');
                 if (!existing) {
                     var defaultUrl = 'http://127.0.0.1:9900/api';
-                    localStorage.setItem('API_BASE_URL', defaultUrl);
-                    existing = defaultUrl;
+                    var input = window.prompt('请输入后端 API 地址（示例：http://127.0.0.1:9900/api）', defaultUrl);
+                    var value = (input || '').trim();
+                    if (value) {
+                        localStorage.setItem('API_BASE_URL', value);
+                        existing = value;
+                    }
                 }
                 if (existing) {
                     window.API_BASE_URL = existing;

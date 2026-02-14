@@ -7,20 +7,23 @@ from typing import List, Dict
 from app.clients.milvus_client import MilvusClient
 from app.rag.embeddings import EmbeddingService
 from loguru import logger
+
+
 class VectorStore:
-    def __init__(self,milvus_client:MilvusClient,embedding_service:EmbeddingService):
-        self.milvus=milvus_client
-        self.embedding=embedding_service
+    def __init__(self, milvus_client: MilvusClient, embedding_service: EmbeddingService):
+        self.milvus = milvus_client
+        self.embedding = embedding_service
         logger.info("向量存储初始化完成")
-    async def insert(self,chunks:List[Dict])->None:
+
+    async def insert(self, chunks: List[Dict]) -> None:
         try:
             if not chunks:
                 logger.warning("没有文档需要插入")
                 return
-            texts=[chunk["content"] for chunk in chunks]
-            vectors=await self.embedding.embed_texts(texts)
-            data=[
-                vectors,texts,[chunk["metadata"] for chunk in chunks]
+            texts = [chunk["content"] for chunk in chunks]
+            vectors = await self.embedding.embed_texts(texts)
+            data = [
+                vectors, texts, [chunk["metadata"] for chunk in chunks]
             ]
             self.milvus.collection.insert(data)
             self.milvus.collection.flush()
@@ -29,23 +32,24 @@ class VectorStore:
         except Exception as e:
             logger.error(f"插入文档失败: {str(e)}")
             raise Exception(f"插入文档失败: {str(e)}")
+
     async def search(self, query: str, top_k: int = 3) -> List[Dict]:
         try:
-            query_vector=await self.embedding.embed_text(query)
-            results=self.milvus.collection.search(
+            query_vector = await self.embedding.embed_text(query)
+            results = self.milvus.collection.search(
                 data=[query_vector],
                 anns_field="vector",
-                param={"metric_type":"IP","params":{"nprobe":10}},
+                param={"metric_type": "IP", "params": {"nprobe": 10}},
                 limit=top_k,
-                output_fields=["content","metadata"]
+                output_fields=["content", "metadata"]
             )
-            docs=[]
+            docs = []
             for hit in results[0]:
                 docs.append(
                     {
-                        "content":hit.entity.get("content"),
-                        "metadata":hit.entity.get("metadata"),
-                        "score":hit.score
+                        "content": hit.entity.get("content"),
+                        "metadata": hit.entity.get("metadata"),
+                        "score": hit.score
                     }
                 )
             logger.info(f"检索到 {len(docs)} 个相关文档")
@@ -53,6 +57,7 @@ class VectorStore:
         except Exception as e:
             logger.error(f"检索文档失败: {str(e)}")
             raise Exception(f"检索文档失败: {str(e)}")
+
     async def delete_by_source(self, source: str) -> None:
         """
         删除指定来源的所有文档
@@ -86,6 +91,3 @@ class VectorStore:
         except Exception as e:
             logger.error(f"删除文档失败: {str(e)}")
             raise Exception(f"删除文档失败: {str(e)}")
-
-
-

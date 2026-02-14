@@ -1,232 +1,190 @@
-# SuperBizAgent (Python / FastAPI)
+# SuperBizAgent - Python Version
 
-> 基于 **FastAPI + LangChain/LangGraph + Milvus** 的智能问答与 AIOps 运维分析 Demo。
+> 基于 FastAPI + LangChain + Milvus 的智能问答与运维系统
 
-本仓库是对原 Java/Spring 版本的 Python 重构。当前实现包含：
+## 项目状态
 
-- **聊天对话**（支持普通/流式 SSE）
-- **文档上传 → 切分 → 向量化 → 入 Milvus**（知识库）
-- **AIOps 分析**（普通/流式 SSE，输出 Markdown 报告）
-- **静态前端**（`static/`，支持本地 vendor，避免 CDN 慢导致的首屏转圈）
+🚧 **当前阶段**: Phase 1 - 简单框架搭建中
 
----
+## 项目简介
+
+这是 SuperBizAgent 的 Python 重构版本，采用渐进式开发策略：
+
+- **Phase 1**: 简单框架 - 基础 AI 对话功能
+- **Phase 2**: 核心功能 - RAG + 工具调用 + 会话管理
+- **Phase 3**: 完整功能 - AIOps 多 Agent 协作
 
 ## 技术栈
 
-- **Backend**: FastAPI (async)
-- **LLM**: 阿里云 DashScope（通义千问）
-- **Agent**: LangChain / LangGraph（AIOps 多 Agent 方向）
-- **Vector DB**: Milvus（Docker Compose：Milvus + etcd + MinIO）
-- **Frontend**: 纯静态页面 `static/`（内置 `marked` + `highlight.js` vendor）
-
----
-
-## 目录结构（关键部分）
-
-```text
-my-agent/
-  app/
-    main.py                 # FastAPI 应用入口（端口默认 9900）
-    api/
-      routes_chat.py        # /api/chat, /api/chat_stream
-      routes_upload.py      # /api/upload
-      routes_session.py     # /api/chat/clear/{id}, /api/chat/sessions
-      routes_aiops.py       # /api/ai_ops, /api/ai_ops_stream
-      routes_milvus.py      # /milvus/health
-    core/settings.py        # 配置（读取 .env）
-  static/
-    index.html              # 前端入口（API_BASE_URL + vendor 优先）
-    app.js                  # 前端逻辑（chat/upload/aiops）
-    styles.css
-    vendor/                 # 本地依赖：marked/highlight.js/github.css
-  docker-compose.yml        # Milvus + etcd + minio（带 volumes 持久化）
-  volumes/                  # 本地持久化数据（已在 .gitignore）
-  uploads/                  # 上传文件目录（已在 .gitignore）
-```
-
----
+- **Web 框架**: FastAPI
+- **AI 框架**: LangChain + LangGraph
+- **LLM 服务**: 阿里云 DashScope (通义千问)
+- **向量数据库**: Milvus
+- **数据验证**: Pydantic v2
+- **日志**: loguru
 
 ## 快速开始
 
-### 0) 前置依赖
+### 1. 环境准备
 
-- Python 3.10+（建议 3.11）
-- Docker Desktop（用于启动 Milvus）
-
-### 1) 安装依赖
-
-使用 venv（示例）：
+#### 方式一：使用 Conda (推荐)
 
 ```bash
-python -m venv venv
-# Windows: venv\Scripts\activate
-source venv/bin/activate
+# 使用 environment.yml 创建环境
+conda env create -f environment.yml
 
+# 激活环境
+conda activate langchain-agent
+```
+
+#### 方式二：使用 pip + venv
+
+```bash
+# 创建虚拟环境
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# 安装依赖
 pip install -r requirements.txt
 ```
 
-或使用 `pyproject.toml`（可选）：
+#### 方式三：使用 pyproject.toml (开发模式)
 
 ```bash
+# 创建虚拟环境
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# 安装依赖
 pip install -e ".[dev]"
 ```
 
-### 2) 配置环境变量（DashScope）
-
-项目通过 `app/core/settings.py` 从 `.env` 读取配置。
-
-至少需要：
+### 2. 配置环境变量
 
 ```bash
-# .env
-DASHSCOPE_API_KEY=你的key
+# 复制配置模板
+cp .env.example .env
+
+# 编辑 .env 文件，填入你的 DASHSCOPE_API_KEY
 ```
 
-（注意：仓库默认 `.gitignore` 已忽略 `.env`，不要提交到 GitHub。）
-
-### 3) 启动 Milvus（带持久化）
+### 3. 启动 Milvus (Phase 2 需要)
 
 ```bash
+# 使用 docker-compose 启动 Milvus
 docker-compose up -d
 ```
 
-说明：`docker-compose.yml` 已挂载本地目录：
-
-- `./volumes/milvus:/var/lib/milvus`
-- `./volumes/etcd:/etcd`
-- `./volumes/minio:/minio_data`
-
-因此 **正常重启容器不会丢数据**；只有删除 `volumes/` 或使用 `docker compose down -v` 才会清空。
-
-### 4) 启动后端
+### 4. 启动应用
 
 ```bash
+# 开发模式
 uvicorn app.main:app --reload --port 9900
 ```
 
-后端地址：
+### 5. 访问 API
 
-- 健康检查：`GET http://127.0.0.1:9900/health`
-- Swagger：`http://127.0.0.1:9900/docs`
+- API 文档: http://localhost:9900/docs
+- 健康检查: http://localhost:9900/health
 
-### 5) 启动前端（静态）
+## 项目结构
 
-前端在 `static/` 目录，不需要打包。
-
-- 用 VS Code Live Server 打开：`static/index.html`
-- 或任意静态服务器打开：`http://127.0.0.1:<port>/static/index.html`
-
-#### 前端如何配置后端地址（重要）
-
-前端会从 `localStorage.API_BASE_URL` 读取后端前缀，默认写入：
-
-```text
-http://127.0.0.1:9900/api
+```
+my-agent/
+├── app/
+│   ├── main.py              # FastAPI 应用入口
+│   ├── core/                # 核心配置
+│   │   ├── settings.py      # 配置管理
+│   │   ├── logging.py       # 日志配置
+│   │   └── dependencies.py  # 依赖注入
+│   ├── api/                 # API 路由
+│   │   ├── routes_chat.py   # 对话路由
+│   │   └── routes_milvus.py # Milvus 健康检查
+│   ├── schemas/             # Pydantic 模型
+│   │   └── chat.py          # 对话模型
+│   ├── services/            # 业务逻辑
+│   │   └── chat_service.py  # 对话服务
+│   └── clients/             # 外部服务客户端
+│       ├── dashscope_client.py  # DashScope 客户端
+│       └── milvus_client.py     # Milvus 客户端
+├── tests/                   # 测试
+├── .env.example             # 环境变量模板
+├── pyproject.toml           # 项目配置
+└── README.md                # 项目文档
 ```
 
-如果你后端不是这个地址，可以在浏览器控制台执行：
+## 开发指南
 
-```js
-localStorage.setItem('API_BASE_URL', 'http://127.0.0.1:9900/api');
-location.reload();
-```
+### Phase 1 任务清单
 
----
+参考 `.kiro/specs/python-agent-migration/tasks.md` 中的任务列表。
 
-## API 一览
-
-### Health
-
-- `GET /health`
-
-### Chat
-
-- `POST /api/chat`
-- `POST /api/chat_stream`（SSE）
-
-SSE 格式：
-
-```text
-data: {"type":"content","data":"..."}
-data: {"type":"done"}
-data: {"type":"error","data":"..."}
-```
-
-### Upload
-
-- `POST /api/upload`（multipart/form-data, field: `file`）
-
-返回示例：
-
-```json
-{"filename":"a.md","chunks":12,"status":"success"}
-```
-
-### Session
-
-- `DELETE /api/chat/clear/{session_id}`
-- `GET /api/chat/sessions`
-
-### AIOps
-
-- `POST /api/ai_ops`
-- `POST /api/ai_ops_stream`（SSE）
-
-SSE `type`：`message` / `content` / `done` / `error`。
-
----
-
-## Milvus 数据查看（推荐 Attu）
-
-可视化管理工具建议使用 Attu：
+### 运行测试
 
 ```bash
-docker run --rm -p 8000:3000 zilliz/attu:latest
+# 运行所有测试
+pytest
+
+# 运行测试并查看覆盖率
+pytest --cov=app --cov-report=html
+
+# 运行特定测试
+pytest tests/unit/test_chat_service.py
 ```
 
-打开 `http://127.0.0.1:8000`，连接：
+### 代码格式化
 
-- Host: `127.0.0.1`
-- Port: `19530`
+```bash
+# 使用 black 格式化代码
+black app/ tests/
 
----
+# 使用 ruff 检查代码
+ruff check app/ tests/
+```
 
-## 常见问题（Troubleshooting）
+## API 文档
 
-### 1) AIOps / Chat 调用 DashScope 报 SSL 错误
+### Phase 1 可用接口
 
-如果日志出现类似：
+#### 健康检查
 
-`SSLError: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol`
+```bash
+GET /health
+```
 
-通常不是代码问题，而是网络/代理/安全软件中间人导致：
+响应:
+```json
+{
+  "status": "ok"
+}
+```
 
-- 尝试切换网络（如手机热点）
-- 检查终端环境变量 `HTTP_PROXY/HTTPS_PROXY/ALL_PROXY`
-- 如果在公司网络，可能需要放行 `dashscope.aliyuncs.com:443`
+#### 基础对话
 
-### 2) 前端打开很慢、Network 里出现大量 `content_script`
+```bash
+POST /api/chat
+Content-Type: application/json
 
-这通常来自浏览器插件/安全模块注入脚本，建议：
+{
+  "Id": "session-123",
+  "Question": "你好"
+}
+```
 
-- 使用 Chrome/Edge 新 Profile（无扩展）对照
-- 禁用所有扩展后再打开
-
-### 3) Milvus 重启后数据是否会消失？
-
-不会（本项目 compose 已做 volumes 持久化）。
-
-会丢数据的操作：
-
-- 删除 `volumes/`
-- `docker compose down -v`
-
----
+响应:
+```json
+{
+  "answer": "你好！有什么我可以帮助你的吗？"
+}
+```
 
 ## 参考文档
 
-- `docs/design.md`：总体架构与迁移设计
-- `docs/PHASE3_PLAN.md`：Phase 3 规划（AIOps 多 Agent）
-- `docs/requirements.md`：需求与验收标准
-- `docs/TOOL_EXPLANATION.md`：LangChain Tool 机制解释
+- [FastAPI 官方文档](https://fastapi.tiangolo.com/)
+- [LangChain 文档](https://docs.langchain.com/)
+- [Milvus 文档](https://milvus.io/docs/)
+- [DashScope API 文档](https://help.aliyun.com/zh/model-studio/)
 
+## 许可证
+
+MIT
