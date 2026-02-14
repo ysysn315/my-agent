@@ -17,6 +17,8 @@ from app.clients.milvus_client import MilvusClient
 from app.agents.chat_agent import ChatAgent
 from app.agents.tools.datetime_tool import get_current_datetime
 from app.agents.tools.internal_docs_tool import create_docs_tool
+from app.agents.tools.prometheus_tool import query_prometheus_alerts
+from app.agents.tools.log_tool import query_log
 
 
 class ChatService:
@@ -37,14 +39,15 @@ class ChatService:
                 logger.info("开始初始化ChatAgent...")
                 await self._ensure_rag_service()
                 tools = [get_current_datetime]
-                
+                tools.append(query_prometheus_alerts)
+                tools.append(query_log)
                 if self.rag_service is not None:
                     # 使用工厂函数创建文档检索工具
                     vector_store = self.rag_service.vector_store
                     docs_tool = create_docs_tool(vector_store)
                     tools.append(docs_tool)
                     logger.info("添加文档检索工具")
-                
+
                 self.chat_agent = ChatAgent(
                     api_key=self.settings.dashscope_api_key,
                     model=self.settings.chat_model,
@@ -78,9 +81,17 @@ class ChatService:
                 logger.info("Step 4: 创建 EmbeddingService")
                 embedding_service = EmbeddingService(self.settings)
 
+                reranker_llm = ChatTongyi(
+                    dashscope_api_key=self.settings.dashscope_api_key,
+                    model_name="qwen-turbo",  # 写死
+                    streaming=False,
+                    temperature=0.0
+                )
+
                 # Step 5
                 logger.info("Step 5: 创建 VectorStore")
-                vector_store = VectorStore(milvus_client, embedding_service)
+                vector_store = VectorStore(milvus_client, embedding_service,
+                                           reranker_llm=reranker_llm, dense_top_k=10, enable_rerank=True)
 
                 # Step 6
                 logger.info("Step 6: 创建 RAGService")
@@ -99,7 +110,7 @@ class ChatService:
             sources = []
             if self.chat_agent is not None:
                 history = self.session_store.get_history(session_id)
-                answer=await self.chat_agent.chat(question,history)
+                answer = await self.chat_agent.chat(question, history)
                 logger.info(f"会话 {session_id} 使用 ChatAgent 回复")
             elif self.rag_service is not None:
                 result = await self.rag_service.generate_answer(question)
