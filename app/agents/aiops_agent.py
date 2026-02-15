@@ -645,3 +645,57 @@ class AIOpsAgent:
             return res.get("response") or "【最终报告】\n达到最大尝试次数，建议人工介入。"
         except Exception as e:
             return f"Error: {e}"
+
+    async def analyze_stream(self, problem: str):
+        """
+        流式分析 - 每一步都实时输出
+
+        原理：
+        1. 不使用 LangGraph 的 ainvoke()，因为它是一次性执行完的
+        2. 改用手动循环，每执行一个节点就 yield 输出
+        3. yield 返回 JSON 字符串，前端通过 SSE 接收
+        """
+        import json
+        state = {
+            "input": problem, "plan": "", "past_steps": [], "iteration": 0, "response": ""
+        }
+        yield json.dumps({"type": "start", "data": "🚀 开始 AIOps 分析"}, ensure_ascii=False)
+        while True:  # ← 关键：需要循环！
+            iteration = state.get("iteration", 0)
+            planner_result = await self.planner_node(state)
+            state.update(planner_result)
+            yield json.dumps({'type': 'plan', 'data': f'📋 计划:\n{state["plan"]}'}, ensure_ascii=False)
+
+            yield json.dumps({'type': 'step', 'data': '⚙️ **Operation**: 执行操作...'}, ensure_ascii=False)
+
+            # 调用 operation_node，执行工具
+            operation_result = await self.operation_node(state)
+            state.update(operation_result)
+
+            # 输出执行结果
+            if state["past_steps"]:
+                last_result = state["past_steps"][-1]
+                # 截取前 300 字符，避免输出太长
+                preview = last_result[:300] + "..." if len(last_result) > 300 else last_result
+                yield json.dumps({'type': 'tool_result', 'data': f'🔧 结果:\n{preview}'}, ensure_ascii=False)
+
+            yield json.dumps({'type': 'step', 'data': '🤔 **Reflection**: 评估中...'}, ensure_ascii=False)
+
+            # 调用 reflection_node，评估结果
+            reflection_result = await self.reflection_node(state)
+            state.update(reflection_result)
+
+            decision = self.should_continue(state)
+
+            if decision == "end":
+                # 生成最终报告
+                final_response = state.get("response", "")
+                if not final_response:
+                    final_response = "【最终报告】\n达到最大尝试次数，建议人工介入。"
+                yield json.dumps({'type': 'report', 'data': final_response}, ensure_ascii=False)
+                yield json.dumps({'type': 'done'}, ensure_ascii=False)
+                break
+
+            else:
+                # 继续下一轮
+                yield json.dumps({'type': 'step', 'data': '🔄 信息不足，继续排查...'}, ensure_ascii=False)

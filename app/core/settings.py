@@ -24,9 +24,17 @@ class Settings(BaseSettings):
     doc_chunk_overlap: int = 100
     rag_top_k: int = 3
 
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    redis_password: str = ""
+    session_expire_seconds: int = 86400
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

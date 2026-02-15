@@ -93,3 +93,29 @@ class AIOpsService:
         report = await self.agent.analyze(problem)
         logger.info("AIOpsService 分析完成")
         return report
+
+    async def analyze_stream(self, problem: str):
+        """
+        流式分析 - 直接转发 Agent 的流式输出
+
+        原理：
+        - 使用 async for 遍历 Agent 的生成器
+        - 每收到一条消息就转发给上层
+        """
+        try:
+            # 确保 Milvus 连接（和 analyze() 一样）
+            await self.milvus_client.connect()
+            await self.milvus_client.ensure_collection()
+            if not self._docs_ready:
+                real_docs_tool = create_docs_tool(self.vector_store)
+                self.tools[2] = real_docs_tool
+                self.agent = AIOpsAgent(
+                    api_key=self.settings.dashscope_api_key,
+                    model=self.settings.chat_model,
+                    tools=self.tools
+                )
+                self._docs_ready = True
+        except Exception as e:
+            logger.warning(f"⚠️ 知识库初始化失败，将继续执行但禁用知识库检索: {e}")
+        async for chunk in self.agent.analyze_stream(problem):
+            yield chunk
