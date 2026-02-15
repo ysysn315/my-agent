@@ -15,12 +15,16 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 class VectorStore:
     def __init__(self, milvus_client: MilvusClient, embedding_service: EmbeddingService,
-                 reranker_llm: Optional[object] = None, dense_top_k: int = 10, enable_rerank: bool = True):
+                 reranker_llm: Optional[object] = None, dense_top_k: int = 10, enable_rerank: bool = True,
+                 enable_hybrid: bool = True):
         self.milvus = milvus_client
         self.embedding = embedding_service
         self.reranker_llm = reranker_llm
         self.dense_top_k = dense_top_k
         self.enable_rerank = enable_rerank
+        self.enable_hybrid = enable_hybrid
+        self.bm25_retriever = None  # 新增
+        self.all_chunks = []  # 新增：存储所有文档用于 BM25
         logger.info("向量存储初始化完成")
 
     async def insert(self, chunks: List[Dict]) -> None:
@@ -36,6 +40,11 @@ class VectorStore:
             self.milvus.collection.insert(data)
             self.milvus.collection.flush()
             logger.info(f"成功插入 {len(chunks)} 个文档块")
+            self.all_chunks.extend(chunks)
+            if self.enable_hybrid:
+                from app.rag.bm25 import BM25Retriever
+                self.bm25_retriever = BM25Retriever()
+                self.bm25_retriever.index(self.all_chunks)
 
         except Exception as e:
             logger.error(f"插入文档失败: {str(e)}")
@@ -64,7 +73,7 @@ class VectorStore:
 - 只输出一行 JSON
 - 严禁输出 markdown（包括 ```json）
 - 严禁输出任何解释文字
-- 输出必须以 '{ '开头，以 '}' 结尾
+- 输出必须以 '{'开头，以 '}' 结尾
 - JSON 必须只包含一个键：order
 {{"order":[0,2,1,3]}}
 规则：
@@ -102,7 +111,7 @@ class VectorStore:
                 data=[query_vector],
                 anns_field="vector",
                 param={"metric_type": "IP", "params": {"nprobe": 10}},
-                limit=max(self.dense_top_k,top_k),
+                limit=max(self.dense_top_k, top_k),
                 output_fields=["content", "metadata"]
             )
             docs = []
@@ -114,6 +123,11 @@ class VectorStore:
                         "score": hit.score
                     }
                 )
+            # ===== 新增：混合检索融合 =====
+            if self.enable_hybrid and self.bm25_retriever is not None:
+                bm25_docs = self.bm25_retriever.search(query, top_k=self.dense_top_k)
+                docs = self._rrf_merge(docs, bm25_docs, top_k=max(self.dense_top_k, top_k))
+
             if not docs:
                 logger.info("检索到0个相关文档")
                 return []
@@ -150,6 +164,19 @@ class VectorStore:
             logger.error(f"检索文档失败: {str(e)}")
             raise Exception(f"检索文档失败: {str(e)}")
 
+    def _rrf_merge(self, vector_docs: List[Dict], bm25_docs: List[Dict], top_k: int, k: int = 60) -> List[Dict]:
+        """简单的 RRF 融合"""
+        scores = {}
+        for rank, doc in enumerate(bm25_docs):
+            key = doc["content"][:100]
+            scores[key] = scores.get(key, {"doc": doc, "score": 0})
+            scores[key]["score"] += 1 / (k + rank + 1)
+        for rank, doc in enumerate(vector_docs):
+            key = doc["content"][:100]
+            scores[key] = scores.get(key, {"doc": doc, "score": 0})
+            scores[key]["score"] += 1 / (k + rank + 1)
+        return [v["doc"] for v in sorted(scores.values(), key=lambda x: x["score"], reverse=True)[:top_k]]
+
     async def delete_by_source(self, source: str) -> None:
         """
         删除指定来源的所有文档
@@ -177,6 +204,11 @@ class VectorStore:
             # 按 ID 删除
             delete_expr = f"id in {ids}"
             self.milvus.collection.delete(delete_expr)
+
+            # 新增：同步删除 all_chunks 并重建 BM25 索引
+            self.all_chunks = [c for c in self.all_chunks if c.get("metadata", {}).get("source") != source]
+            if self.enable_hybrid and self.bm25_retriever is not None:
+                self.bm25_retriever.index(self.all_chunks)
 
             logger.info(f"已删除来源为 {source} 的 {len(ids)} 个文档")
 

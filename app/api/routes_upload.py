@@ -9,33 +9,17 @@ from app.services.vector_index_service import VectorIndexService
 from app.core.settings import Settings, get_settings
 from app.clients.milvus_client import MilvusClient
 from app.rag.embeddings import EmbeddingService
-from app.rag.chunking import DocumentChunker
+from app.rag.chunking import DocumentChunker,get_strategy_by_filename
 from app.rag.vector_store import VectorStore
 from loguru import logger
 import os
 router = APIRouter()
 
-async def get_index_service(
-        settings:Settings=Depends(get_settings)
-)->VectorIndexService:
-    milvus_client=MilvusClient(settings)
-    await milvus_client.connect()
-    await  milvus_client.ensure_collection()
-
-    embedding_service=EmbeddingService(settings)
-    vector_store=VectorStore(milvus_client,embedding_service)
-    chunker=DocumentChunker(
-        max_size=settings.doc_chunk_max_size,
-        overlap= settings.doc_chunk_overlap
-    )
-    index_service=VectorIndexService(chunker,vector_store)
-    return index_service
 
 @router.post("/upload", response_model=UploadResponse)
 async def upload_file(
         file: UploadFile = File(...),
-        settings: Settings = Depends(get_settings),
-        index_service: VectorIndexService = Depends(get_index_service)
+        settings: Settings = Depends(get_settings)
 ):
     try:
         allowed_extensions=[".txt",".md"]
@@ -55,6 +39,20 @@ async def upload_file(
             content=await file.read()
             f.write(content)
         logger.info(f"文件{file.filename}保存成功:{file_path}")
+        strategy=get_strategy_by_filename(file.filename)
+        logger.info(f"文件 {file.filename} 使用分块策略: {strategy.value}")
+
+        milvus_client = MilvusClient(settings)
+        await milvus_client.connect()
+        await milvus_client.ensure_collection()
+
+        embedding_service=EmbeddingService(settings)
+        vector_store=VectorStore(milvus_client,embedding_service)
+        chunker=DocumentChunker(
+            strategy=strategy, max_size=settings.doc_chunk_max_size,
+            overlap=settings.doc_chunk_overlap
+        )
+        index_service=VectorIndexService(chunker,vector_store)
         result=await index_service.index_document(file_path,file.filename)
         return UploadResponse(**result)
     except HTTPException:
