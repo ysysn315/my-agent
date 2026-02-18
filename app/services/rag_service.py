@@ -4,7 +4,7 @@ from langchain_core.prompts import ChatPromptTemplate  # LangChain 的 Prompt �
 from langchain_core.output_parsers import StrOutputParser  # 输出解析器
 from langchain_core.runnables import RunnablePassthrough  # 数据传递工具
 from loguru import logger  # 日志工具
-
+from app.rag.query_rewriter import QueryRewriter
 
 class RAGService:
     def __init__(self, vector_store, llm):
@@ -19,13 +19,41 @@ class RAGService:
         用户问题：{question}
         回答：
         """)
+        self.query_rewriter=QueryRewriter(llm) if llm else None
         logger.info("RAG 服务初始化完成")
 
     async def retrieve(self, question, top_k: int = 3) -> List[Dict]:
+        #查询改写
+        if self.query_rewriter:
+            rewritten_query=await self.query_rewriter.process(question)
+        else:
+            rewritten_query=question
         # 检索相关文档
-        res = await self.vector_store.search(question, top_k)
+        res = await self.vector_store.search(rewritten_query, top_k)
         logger.info(f"文档检索到{len(res)}个文档")
         return res
+    
+    async def retrieve_multi_query(self,query:str,top_k:int=3)->List[Dict]:
+        """多查询检索（查询扩展）"""
+        if not self.query_rewriter:
+            return await self.vector_store.search(query,top_k=top_k)
+        #生成多个查询
+        queries=await self.query_rewriter.process_with_expansions(query)
+        #对每个查询检索
+        all_docs=[]
+        seen_content=set()
+        for q in queries:
+            docs=await self.vector_store.search(q,top_k=top_k)
+            for doc in docs:
+                content_key=doc.get("content","")[:100]
+                if content_key not in seen_content:
+                    all_docs.append(doc)
+                    seen_content.add(content_key)
+        return all_docs[:top_k]
+
+
+
+
 
     def format_docs(self, docs: List[Dict]) -> str:
         # 格式化文档为字符串
@@ -40,7 +68,7 @@ class RAGService:
 
     async def generate_answer(self, question):
         # 生成完整回答
-        docs = await self.retrieve(question)
+        docs = await self.retrieve_multi_query(question)
         formatted = self.format_docs(docs)
         chain = self.prompt | self.llm | StrOutputParser()
         result = await chain.ainvoke(
@@ -57,7 +85,7 @@ class RAGService:
 
     async def generate_answer_stream(self, question):
         try:
-            docs = await self.retrieve(question)
+            docs = await self.retrieve_multi_query(question)
             formatted = self.format_docs(docs)
             chain = self.prompt | self.llm | StrOutputParser()
             async for chunk in chain.astream(

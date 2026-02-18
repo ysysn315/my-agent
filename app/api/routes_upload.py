@@ -22,12 +22,12 @@ async def upload_file(
         settings: Settings = Depends(get_settings)
 ):
     try:
-        allowed_extensions=[".txt",".md"]
+        allowed_extensions= [".txt", ".md", ".pdf", ".docx", ".html", ".htm", ".csv", ".json", ".xlsx", ".xls"]
         file_ext=os.path.splitext(file.filename)[1].lower()
         if file_ext not in allowed_extensions:
             raise HTTPException(
                 status_code=400,
-                detail=f"不支持的文件格式: {file_ext}，仅支持 .txt 和 .md 文件"
+               detail=f"不支持的文件格式: {file_ext}，支持 .txt, .md, .pdf, .docx, .html, .csv, .json, .xlsx, .xls"
             )
         logger.info(f"接收到文件上传请求: {file.filename}")
 

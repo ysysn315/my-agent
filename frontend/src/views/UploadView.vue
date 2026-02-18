@@ -16,13 +16,13 @@
         <input
           type="file"
           ref="fileInput"
-          accept=".txt,.md,.pdf,.docx,.html,.htm,.csv,.json"
+          accept=".txt,.md,.pdf,.docx,.html,.htm,.csv,.json,.xlsx,.xls"
           @change="handleFileSelect"
           hidden
         >
         <div class="upload-icon">📄</div>
         <p class="upload-text">拖拽文件到此处，或点击选择文件</p>
-        <p class="upload-hint">支持 .txt, .md, .pdf, .docx, .html, .csv, .json 格式</p>
+        <p class="upload-hint">支持 .txt, .md, .pdf, .docx, .html, .csv, .json, .xlsx, .xls 格式</p>
       </div>
       
       <div v-if="uploading" class="upload-progress">
@@ -106,12 +106,12 @@ const handleFileSelect = (e) => {
 const uploadFile = async (file) => {
   // 检查文件格式
   const ext = file.name.split('.').pop().toLowerCase()
-  const allowedExts = ['txt', 'md', 'pdf', 'docx', 'html', 'htm', 'csv', 'json']
+  const allowedExts = ['txt', 'md', 'pdf', 'docx', 'html', 'htm', 'csv', 'json', 'xlsx', 'xls']
   if (!allowedExts.includes(ext)) {
     uploadResult.value = {
       success: false,
       filename: file.name,
-      message: '不支持的文件格式，支持 .txt, .md, .pdf, .docx, .html, .csv, .json'
+      message: '不支持的文件格式，支持 .txt, .md, .pdf, .docx, .html, .csv, .json, .xlsx, .xls'
     }
     return
   }

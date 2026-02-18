@@ -7,6 +7,7 @@ from typing import Dict
 from app.rag.chunking import DocumentChunker
 from app.rag.vector_store import VectorStore
 from loguru import logger
+from app.rag.load import DocumentLoader
 
 
 class VectorIndexService:
@@ -17,8 +18,8 @@ class VectorIndexService:
 
     async def index_document(self, file_path: str, filename: str) -> Dict:
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                text = f.read()
+            text=DocumentLoader.load(file_path)
+        
             if not text or not text.strip():
                 logger.warning(f"文件{filename}为空")
                 return {"filename": filename, "chunks": 0, "status": "failed"}

@@ -6,8 +6,13 @@ from loguru import logger
 from enum import Enum
 class ChunkStrategy(Enum):
     """分块策略枚举"""
-    RECURSIVE="recursive"
-    MARKDOWN="markdown"
+    RECURSIVE = "recursive"      # 通用文本
+    MARKDOWN = "markdown"        # Markdown 文档
+    PDF = "pdf"                  # PDF 文档
+    DOCX = "docx"                # Word 文档
+    HTML = "html"                # HTML 网页
+    CSV = "csv"                  # CSV 表格
+    JSON = "json"                # JSON 数据
 class DocumentChunker:
     def __init__(self, strategy:ChunkStrategy,max_size: int = 800, overlap: int = 100):
         self.strategy=strategy
@@ -57,6 +62,17 @@ class DocumentChunker:
 def get_strategy_by_filename(filename: str) -> ChunkStrategy:
     """根据文件名自动选择分块策略"""
     ext = filename.lower().split('.')[-1]
-    strategy_map = {'md': ChunkStrategy.MARKDOWN, 'markdown': ChunkStrategy.MARKDOWN}
+    strategy_map = {
+        'md': ChunkStrategy.MARKDOWN,
+        'markdown': ChunkStrategy.MARKDOWN,
+        'pdf': ChunkStrategy.PDF,
+        'docx': ChunkStrategy.DOCX,
+        'html': ChunkStrategy.HTML,
+        'htm': ChunkStrategy.HTML,
+        'csv': ChunkStrategy.CSV,
+        'json': ChunkStrategy.JSON,
+        'xlsx': ChunkStrategy.CSV,  # Excel 使用 CSV 策略（表格处理）
+        'xls': ChunkStrategy.CSV,   # Excel 使用 CSV 策略（表格处理）
+    }
     return strategy_map.get(ext, ChunkStrategy.RECURSIVE)
 
