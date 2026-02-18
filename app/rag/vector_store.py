@@ -15,11 +15,12 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 class VectorStore:
     def __init__(self, milvus_client: MilvusClient, embedding_service: EmbeddingService,
-                 reranker_llm: Optional[object] = None, dense_top_k: int = 10, enable_rerank: bool = True,
+                 reranker_llm: Optional[object] = None,reranker: Optional[object] = None, dense_top_k: int = 10, enable_rerank: bool = True,
                  enable_hybrid: bool = True):
         self.milvus = milvus_client
         self.embedding = embedding_service
         self.reranker_llm = reranker_llm
+        self.reranker = reranker 
         self.dense_top_k = dense_top_k
         self.enable_rerank = enable_rerank
         self.enable_hybrid = enable_hybrid
@@ -135,23 +136,29 @@ class VectorStore:
             logger.info(
                 f"[VectorStore.search] 候选数={len(docs)} (dense_top_k={self.dense_top_k}, top_k={top_k})"
             )
-            if self.enable_rerank and self.reranker_llm is not None and len(docs) > 1:
-                try:
-                    prompt = self._build_rerank_prompt(query, docs)
-                    messages = [
-                        SystemMessage(content="你是一个严格输出JSON的重排序器。"),
-                        HumanMessage(content=prompt),
-                    ]
-                    resp = await self.reranker_llm.ainvoke(messages)
-                    raw = resp.content if hasattr(resp, "content") else str(resp)
-                    order = self._safe_parse_order(raw, n=len(docs))
-                    if order is not None:
-                        docs = [docs[i] for i in order]
-                        logger.info(f"[VectorStore.search] rerank 成功，order={order}")
-                    else:
-                        logger.warning(f"rerank JSON 解析失败 raw={raw!r}")
-                except Exception as e:
-                    logger.warning(f"rerank 失败，已回退向量排序: {e}")
+            if self.enable_rerank and len(docs) > 1:
+                if self.reranker is not None:
+                    docs=self.reranker.rerank(query,docs,top_k=max(self.dense_top_k,top_k))  
+                    logger.info("[VectorStore.search] Rerank 模型重排完成")
+                      
+                elif self.reranker_llm is not None:
+
+                    try:
+                        prompt = self._build_rerank_prompt(query, docs)
+                        messages = [
+                            SystemMessage(content="你是一个严格输出JSON的重排序器。"),
+                            HumanMessage(content=prompt),
+                        ]
+                        resp = await self.reranker_llm.ainvoke(messages)
+                        raw = resp.content if hasattr(resp, "content") else str(resp)
+                        order = self._safe_parse_order(raw, n=len(docs))
+                        if order is not None:
+                            docs = [docs[i] for i in order]
+                            logger.info(f"[VectorStore.search] rerank 成功，order={order}")
+                        else:
+                            logger.warning(f"rerank JSON 解析失败 raw={raw!r}")
+                    except Exception as e:
+                        logger.warning(f"rerank 失败，已回退向量排序: {e}")
             after = [(d.get("metadata") or {}).get("source", "") for d in docs[:3]]
             logger.info(f"[VectorStore.search] top3 before={before} after={after}")
             docs = docs[:top_k]

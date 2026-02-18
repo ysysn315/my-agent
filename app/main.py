@@ -4,6 +4,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import routes_chat, routes_milvus, routes_session, routes_upload, routes_aiops
+import os
+os.environ["HF_HOME"] = "D:/AI编程/kiro-place/JAVA-agent/my-agent/models"
+os.environ["TRANSFORMERS_CACHE"] = "D:/AI编程/kiro-place/JAVA-agent/my-agent/models"
 app=FastAPI()
 
 

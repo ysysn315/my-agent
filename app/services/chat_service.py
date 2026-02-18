@@ -19,7 +19,7 @@ from app.agents.tools.datetime_tool import get_current_datetime
 from app.agents.tools.internal_docs_tool import create_docs_tool
 from app.agents.tools.prometheus_tool import query_prometheus_alerts
 from app.agents.tools.log_tool import query_log
-
+from app.rag.reranker import BGEReranker
 
 class ChatService:
     def __init__(self, settings: Settings, session_store: SessionStore):
@@ -80,7 +80,14 @@ class ChatService:
                 # Step 4
                 logger.info("Step 4: 创建 EmbeddingService")
                 embedding_service = EmbeddingService(self.settings)
-
+                
+                logger.info("Step 4.5: 创建 BGE Reranker")
+                try:
+                    reranker = BGEReranker("BAAI/bge-reranker-base")
+                except Exception as e:
+                    logger.warning(f"BGE Reranker 初始化失败，回退到 LLM 重排: {e}")
+                    reranker = None
+                
                 reranker_llm = ChatTongyi(
                     dashscope_api_key=self.settings.dashscope_api_key,
                     model_name="qwen-turbo",  # 写死
@@ -91,7 +98,7 @@ class ChatService:
                 # Step 5
                 logger.info("Step 5: 创建 VectorStore")
                 vector_store = VectorStore(milvus_client, embedding_service,
-                                           reranker_llm=reranker_llm, dense_top_k=10, enable_rerank=True)
+                                           reranker_llm=reranker_llm, reranker=reranker, dense_top_k=10, enable_rerank=True)
 
                 # Step 6
                 logger.info("Step 6: 创建 RAGService")
