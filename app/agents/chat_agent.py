@@ -116,7 +116,8 @@ class ChatAgent:
             
             # 构建消息列表
             messages = [
-                SystemMessage(content="你是一个有用的助手。你可以使用提供的工具来回答问题。")
+               SystemMessage(content="你是一个有用的助手。优先使用内部知识库,也可以使用其他工具；当问题需要最新互联网信息或知识库没有答案时，调用 tavily_search。")
+
             ]
             
             # 添加历史消息

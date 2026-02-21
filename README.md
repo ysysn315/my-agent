@@ -183,6 +183,60 @@ ruff check app/ tests/
 | `REDIS_HOST` | ❌ | Redis 主机地址（默认：localhost） |
 | `REDIS_PORT` | ❌ | Redis 端口（默认：6379） |
 
+## RAG 评测结果（最新）
+
+评测时间：2026-02-21
+
+### 1）检索评测总览
+
+| 指标 | 数值 |
+|---|---:|
+| num_cases | 40 |
+| hit@1 | 0.6500 |
+| hit@3 | 0.8750 |
+| recall@3 | 0.8000 |
+| mrr | 0.7458 |
+| precision@3 | 0.2917 |
+| ndcg@3 | 0.7364 |
+| map | 0.6979 |
+
+### 2）生成评测总览
+
+| 指标 | 数值 |
+|---|---:|
+| num_cases | 8 |
+| keyword_recall | 0.9750 |
+| source_hit | 0.9375 |
+
+### 3）检索配置对比（Leaderboard）
+
+| 配置 | hit@3 | recall@3 | mrr | precision@3 | ndcg@3 | map |
+|---|---:|---:|---:|---:|---:|---:|
+| hybrid_rerank_k5 | 0.8500 | 0.7875 | 0.7508 | 0.2833 | 0.7506 | 0.7281 |
+| rerank_only | 0.8750 | 0.8000 | 0.7625 | 0.2917 | 0.7489 | 0.7146 |
+| hybrid_rerank | 0.8500 | 0.8000 | 0.7500 | 0.2917 | 0.7420 | 0.7083 |
+| baseline | 0.8250 | 0.7625 | 0.6708 | 0.2750 | 0.6776 | 0.6354 |
+| hybrid_only | 0.8250 | 0.7625 | 0.6708 | 0.2750 | 0.6776 | 0.6354 |
+
+### 4）关键结论
+
+- 引入 rerank 的配置在排序质量（MRR/NDCG/MAP）上明显优于 baseline，说明在强干扰语料下 rerank 有效。
+- 当前综合表现最均衡的配置是 `hybrid_rerank_k5`。
+- 生成侧表现稳定：`keyword_recall=0.975`，`source_hit=0.9375`。
+- 经过指标修正后，MAP/NDCG 数值已可解释（不再出现超过 1 的异常情况）。
+
+### 5）本地复现实验命令
+
+```bash
+conda activate langchain-agent
+cd D:\AI编程\kiro-place\JAVA-agent\my-agent
+
+python -m evals.rag.run_retrieval_eval
+python -m evals.rag.run_experiments
+python -m evals.rag.run_generation_eval
+python -m pytest tests/test_rag_regression.py -q
+
+
 ## 参考文档
 
 - [FastAPI 官方文档](https://fastapi.tiangolo.com/)

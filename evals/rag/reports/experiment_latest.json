@@ -1,0 +1,100 @@
+{
+  "leaderboard_by_mrr": [
+    {
+      "config": {
+        "name": "hybrid_rerank_k5",
+        "top_k": 5,
+        "enable_hybrid": true,
+        "enable_rerank": true
+      },
+      "metrics": {
+        "hit@3": 0.85,
+        "recall@3": 0.7875,
+        "mrr": 0.7508,
+        "precision@3": 0.2833,
+        "ndcg@3": 0.7506,
+        "map": 0.7281
+      }
+    },
+    {
+      "config": {
+        "name": "rerank_only",
+        "top_k": 3,
+        "enable_hybrid": false,
+        "enable_rerank": true
+      },
+      "metrics": {
+        "hit@3": 0.875,
+        "recall@3": 0.8,
+        "mrr": 0.7625,
+        "precision@3": 0.2917,
+        "ndcg@3": 0.7489,
+        "map": 0.7146
+      }
+    },
+    {
+      "config": {
+        "name": "hybrid_rerank",
+        "top_k": 3,
+        "enable_hybrid": true,
+        "enable_rerank": true
+      },
+      "metrics": {
+        "hit@3": 0.85,
+        "recall@3": 0.8,
+        "mrr": 0.75,
+        "precision@3": 0.2917,
+        "ndcg@3": 0.742,
+        "map": 0.7083
+      }
+    },
+    {
+      "config": {
+        "name": "baseline",
+        "top_k": 3,
+        "enable_hybrid": false,
+        "enable_rerank": false
+      },
+      "metrics": {
+        "hit@3": 0.825,
+        "recall@3": 0.7625,
+        "mrr": 0.6708,
+        "precision@3": 0.275,
+        "ndcg@3": 0.6776,
+        "map": 0.6354
+      }
+    },
+    {
+      "config": {
+        "name": "hybrid_only",
+        "top_k": 3,
+        "enable_hybrid": true,
+        "enable_rerank": false
+      },
+      "metrics": {
+        "hit@3": 0.825,
+        "recall@3": 0.7625,
+        "mrr": 0.6708,
+        "precision@3": 0.275,
+        "ndcg@3": 0.6776,
+        "map": 0.6354
+      }
+    }
+  ],
+  "best": {
+    "config": {
+      "name": "hybrid_rerank_k5",
+      "top_k": 5,
+      "enable_hybrid": true,
+      "enable_rerank": true
+    },
+    "metrics": {
+      "hit@3": 0.85,
+      "recall@3": 0.7875,
+      "mrr": 0.7508,
+      "precision@3": 0.2833,
+      "ndcg@3": 0.7506,
+      "map": 0.7281
+    }
+  }
+}

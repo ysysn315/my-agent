@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     redis_password: str = ""
     session_expire_seconds: int = 86400
 
+    tavily_api_key: str = ""
+    tavily_base_url: str = "https://api.tavily.com"
+
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

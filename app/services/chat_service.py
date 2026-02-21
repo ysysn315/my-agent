@@ -20,6 +20,7 @@ from app.agents.tools.internal_docs_tool import create_docs_tool
 from app.agents.tools.prometheus_tool import query_prometheus_alerts
 from app.agents.tools.log_tool import query_log
 from app.rag.reranker import BGEReranker
+from app.agents.tools.tavily_tool import create_tavily_search_tool
 
 class ChatService:
     def __init__(self, settings: Settings, session_store: SessionStore):
@@ -39,6 +40,15 @@ class ChatService:
                 logger.info("开始初始化ChatAgent...")
                 await self._ensure_rag_service()
                 tools = [get_current_datetime]
+                if self.settings.tavily_api_key:
+                    tavily_tool = create_tavily_search_tool(
+                        api_key=self.settings.tavily_api_key,
+                        base_url=self.settings.tavily_base_url
+                    )
+                    tools.append(tavily_tool)
+                    logger.info("Added Tavily search tool")
+                else:
+                    logger.warning("TAVILY_API_KEY not configured, skip Tavily tool")
                 tools.append(query_prometheus_alerts)
                 tools.append(query_log)
                 if self.rag_service is not None:
@@ -151,9 +161,15 @@ class ChatService:
     async def chat_stream(self, session_id: str, question: str):
         """流式对话"""
         try:
-            await self._ensure_rag_service()
+            await self._ensure_agent()
             full_answer = ""
-            if self.rag_service is not None:
+            if self.chat_agent is not None:
+                history = self.session_store.get_history(session_id)
+                answer = await self.chat_agent.chat(question, history)
+                full_answer = answer
+                yield answer
+                logger.info(f"Session {session_id} streamed via ChatAgent")
+            elif self.rag_service is not None:
                 async for chunk in self.rag_service.generate_answer_stream(question):
                     full_answer += chunk
                     yield chunk
