@@ -3,15 +3,23 @@
 from typing import List
 from langchain_community.embeddings import DashScopeEmbeddings
 from app.core.settings import Settings
+from app.rag.bge_embeddings import BGELocalEmbeddings
 from loguru import logger
 
 
 class EmbeddingService:
     def __init__(self, settings: Settings):
-        self.embeddings = DashScopeEmbeddings(
-            model=settings.embedding_model,  # "text-embedding-v4"
-            dashscope_api_key=settings.dashscope_api_key
-        )
+        # 默认行为不变；只有显式配置 EMBEDDING_PROVIDER=bge 时才走本地模型。
+        if settings.embedding_provider == "bge":
+            self.embeddings = BGELocalEmbeddings(
+                model_name=settings.embedding_model,
+                device=settings.embedding_device,
+            )
+        else:
+            self.embeddings = DashScopeEmbeddings(
+                model=settings.embedding_model,  # "text-embedding-v4"
+                dashscope_api_key=settings.dashscope_api_key
+            )
 
     async def embed_text(self, text: str) -> List[float]:
         try:

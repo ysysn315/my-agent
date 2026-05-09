@@ -24,6 +24,13 @@ class DocumentLoader:
         if loader is None:
             raise ValueError(f"不支持的文件格式：{ext}")
         return loader(file_path)
+
+    @staticmethod
+    def load_records(file_path: str) -> List[Dict]:
+        ext = file_path.lower().split('.')[-1]
+        if ext in {"xlsx", "xls"}:
+            return DocumentLoader.load_excel_records(file_path)
+        return [{"content": DocumentLoader.load(file_path), "metadata": {}}]
     @staticmethod
     def _load_text(file_path:str)->str:
         with open(file_path,'r',encoding='utf-8') as f:
@@ -84,9 +91,15 @@ class DocumentLoader:
     @staticmethod
     def load_excel(file_path: str) -> str:
         """加载 Excel 文件"""
+        records = DocumentLoader.load_excel_records(file_path)
+        return "\n\n".join(record["content"] for record in records)
+
+    @staticmethod
+    def load_excel_records(file_path: str) -> List[Dict]:
+        """按 sheet 加载 Excel 文件，保留 sheet_name 元数据"""
         from openpyxl import load_workbook
         wb=load_workbook(file_path,data_only=True)
-        text_parts=[]
+        records=[]
         for sheet_name in wb.sheetnames:
             sheet=wb[sheet_name]
 
@@ -99,5 +112,10 @@ class DocumentLoader:
                 headers=rows[0]
                 data_rows=rows[1:]
                 sheet_text=TableProcessor.to_semantic_text(headers,data_rows,table_name=f"{sheet_name}")
-                text_parts.append(sheet_text)
-        return "\n\n".join(text_parts)
+                records.append(
+                    {
+                        "content": sheet_text,
+                        "metadata": {"sheet_name": sheet_name},
+                    }
+                )
+        return records

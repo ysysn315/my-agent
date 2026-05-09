@@ -39,6 +39,7 @@ ENV/
 # Logs
 logs/
 *.log
+frontend/.vite-run/
 
 # Uploads
 uploads/*
@@ -51,6 +52,7 @@ htmlcov/
 
 # Milvus Data
 volumes/
+models/
 
 # OS
 .DS_Store

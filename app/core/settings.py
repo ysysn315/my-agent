@@ -11,8 +11,11 @@ class Settings(BaseSettings):
 
     # DashScope 配置
     dashscope_api_key: str
-    chat_model: str = "qwen-max"
+    chat_model: str = "qwen3-max"
+    # 默认仍走 DashScope；只有显式改成 bge 才切到本地 embedding。
+    embedding_provider: str = "dashscope"
     embedding_model: str = "text-embedding-v4"
+    embedding_device: str = ""
 
     # Milvus 配置
     milvus_host: str = "localhost"

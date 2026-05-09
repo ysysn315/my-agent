@@ -22,22 +22,22 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """应用启动时的初始化操作"""
-    print("🚀 应用启动中...")
+    print("Application starting...")
     # TODO: 这里后续会添加：
     # - 初始化日志系统
     # - 连接 Milvus 数据库
     # - 初始化其他资源
-    print("✅ 应用启动完成")
+    print("Application startup complete")
 
 # 关闭事件：应用关闭时执行
 @app.on_event("shutdown")
 async def shutdown_event():
     """应用关闭时的清理操作"""
-    print("🛑 应用关闭中...")
+    print("Application shutting down...")
     # TODO: 这里后续会添加：
     # - 断开 Milvus 连接
     # - 清理临时资源
-    print("✅ 应用已关闭")
+    print("Application shutdown complete")
 
 
 @app.get("/health")

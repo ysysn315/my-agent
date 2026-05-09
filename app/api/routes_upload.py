@@ -3,7 +3,8 @@
 # 文件上传路由
 # TODO: 任务 13.3 - 实现文件上传 API
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from typing import Optional
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
 from app.schemas.upload import UploadResponse
 from app.services.vector_index_service import VectorIndexService
 from app.core.settings import Settings, get_settings
@@ -19,6 +20,7 @@ router = APIRouter()
 @router.post("/upload", response_model=UploadResponse)
 async def upload_file(
         file: UploadFile = File(...),
+        title: Optional[str] = Form(None),
         settings: Settings = Depends(get_settings)
 ):
     try:
@@ -53,7 +55,7 @@ async def upload_file(
             overlap=settings.doc_chunk_overlap
         )
         index_service=VectorIndexService(chunker,vector_store)
-        result=await index_service.index_document(file_path,file.filename)
+        result=await index_service.index_document(file_path,file.filename,title=title or "")
         return UploadResponse(**result)
     except HTTPException:
         raise

@@ -11,6 +11,10 @@ import json
 import re
 from typing import Optional
 from langchain_core.messages import SystemMessage, HumanMessage
+from app.rag.metadata_filters import (
+    matches_metadata_filters,
+    normalize_metadata_filters,
+)
 
 
 class VectorStore:
@@ -105,14 +109,24 @@ class VectorStore:
             return None
         return None
 
-    async def search(self, query: str, top_k: int = 3) -> List[Dict]:
+    async def search(
+        self,
+        query: str,
+        top_k: int = 3,
+        metadata_filters: Optional[Dict] = None,
+    ) -> List[Dict]:
         try:
+            normalized_filters = normalize_metadata_filters(metadata_filters)
+            candidate_limit = max(self.dense_top_k, top_k)
+            if normalized_filters:
+                candidate_limit = max(candidate_limit * 5, top_k * 10, 30)
+
             query_vector = await self.embedding.embed_text(query)
             results = self.milvus.collection.search(
                 data=[query_vector],
                 anns_field="vector",
                 param={"metric_type": "IP", "params": {"nprobe": 10}},
-                limit=max(self.dense_top_k, top_k),
+                limit=candidate_limit,
                 output_fields=["content", "metadata"]
             )
             docs = []
@@ -126,19 +140,35 @@ class VectorStore:
                 )
             # ===== 新增：混合检索融合 =====
             if self.enable_hybrid and self.bm25_retriever is not None:
-                bm25_docs = self.bm25_retriever.search(query, top_k=self.dense_top_k)
-                docs = self._rrf_merge(docs, bm25_docs, top_k=max(self.dense_top_k, top_k))
+                bm25_docs = self.bm25_retriever.search(query, top_k=candidate_limit)
+                docs = self._rrf_merge(docs, bm25_docs, top_k=candidate_limit)
 
             if not docs:
                 logger.info("检索到0个相关文档")
                 return []
+
+            if normalized_filters:
+                before_filter_count = len(docs)
+                docs = [
+                    doc for doc in docs
+                    if matches_metadata_filters(doc.get("metadata"), normalized_filters)
+                ]
+                logger.info(
+                    f"[VectorStore.search] metadata_filters={normalized_filters} "
+                    f"filtered {before_filter_count} -> {len(docs)}"
+                )
+                if not docs:
+                    logger.info("metadata 过滤后无结果")
+                    return []
+
             before = [(d.get("metadata") or {}).get("source", "") for d in docs[:3]]
             logger.info(
-                f"[VectorStore.search] 候选数={len(docs)} (dense_top_k={self.dense_top_k}, top_k={top_k})"
+                f"[VectorStore.search] 候选数={len(docs)} "
+                f"(dense_top_k={self.dense_top_k}, top_k={top_k}, candidate_limit={candidate_limit})"
             )
             if self.enable_rerank and len(docs) > 1:
                 if self.reranker is not None:
-                    docs=self.reranker.rerank(query,docs,top_k=max(self.dense_top_k,top_k))  
+                    docs=self.reranker.rerank(query,docs,top_k=candidate_limit)
                     logger.info("[VectorStore.search] Rerank 模型重排完成")
                       
                 elif self.reranker_llm is not None:
@@ -164,7 +194,7 @@ class VectorStore:
             docs = docs[:top_k]
             logger.info(f"检索到 {len(docs)} 个相关文档")
             logger.info(
-                f"[VectorStore.search] 返回数={len(docs)} / 候选数={max(self.dense_top_k, top_k)} (top_k={top_k})"
+                f"[VectorStore.search] 返回数={len(docs)} / 候选数={candidate_limit} (top_k={top_k})"
             )
             return docs
         except Exception as e:

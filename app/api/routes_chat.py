@@ -27,7 +27,15 @@ def get_chat_service(settings: Settings = Depends(get_settings),
 async def chat(request: ChatRequest, chat_service: ChatService = Depends(get_chat_service)):
     try:
         logger.info(f"收到对话请求 - Session: {request.Id}")
-        answer = await chat_service.chat(request.Id, request.Question)
+        metadata_filters = (
+            request.metadata_filters.model_dump(exclude_none=True)
+            if request.metadata_filters else None
+        )
+        answer = await chat_service.chat(
+            request.Id,
+            request.Question,
+            metadata_filters=metadata_filters,
+        )
         return ChatResponse(
             answer=answer["answer"],
             sources=answer["sources"]
@@ -46,7 +54,15 @@ async def chat_stream(
     async def generate():
         try:
             logger.info(f"收到流式对话请求 - Session: {request.Id}")
-            async for chunk in chat_service.chat_stream(request.Id,request.Question):
+            metadata_filters = (
+                request.metadata_filters.model_dump(exclude_none=True)
+                if request.metadata_filters else None
+            )
+            async for chunk in chat_service.chat_stream(
+                request.Id,
+                request.Question,
+                metadata_filters=metadata_filters,
+            ):
                 yield f"data: {json.dumps({'type': 'content', 'data': chunk}, ensure_ascii=False)}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
         except Exception as e:
